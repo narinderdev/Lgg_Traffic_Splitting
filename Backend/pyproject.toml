@@ -1,0 +1,40 @@
+[project]
+name = "traffic-splitting-backend"
+version = "0.1.0"
+description = "FastAPI backend for the LGG internal traffic splitting tool"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.16.5",
+  "asyncpg>=0.30.0",
+  "fastapi>=0.121.1",
+  "greenlet>=3.2.4",
+  "httpx>=0.28.1",
+  "pydantic-settings>=2.11.0",
+  "psycopg[binary]>=3.2.12",
+  "python-multipart>=0.0.20",
+  "redis>=7.0.1",
+  "sqlalchemy>=2.0.44",
+  "uvicorn[standard]>=0.38.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.2",
+  "pytest-asyncio>=1.2.0",
+  "ruff>=0.14.1",
+]
+
+[build-system]
+requires = ["setuptools>=80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

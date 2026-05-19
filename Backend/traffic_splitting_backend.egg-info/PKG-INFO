@@ -1,0 +1,25 @@
+Metadata-Version: 2.4
+Name: traffic-splitting-backend
+Version: 0.1.0
+Summary: FastAPI backend for the LGG internal traffic splitting tool
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: alembic>=1.16.5
+Requires-Dist: asyncpg>=0.30.0
+Requires-Dist: fastapi>=0.121.1
+Requires-Dist: greenlet>=3.2.4
+Requires-Dist: httpx>=0.28.1
+Requires-Dist: pydantic-settings>=2.11.0
+Requires-Dist: psycopg[binary]>=3.2.12
+Requires-Dist: python-multipart>=0.0.20
+Requires-Dist: redis>=7.0.1
+Requires-Dist: sqlalchemy>=2.0.44
+Requires-Dist: uvicorn[standard]>=0.38.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.4.2; extra == "dev"
+Requires-Dist: pytest-asyncio>=1.2.0; extra == "dev"
+Requires-Dist: ruff>=0.14.1; extra == "dev"
+
+# Backend
+
+FastAPI management and reporting API for the traffic splitting tool.

@@ -1,0 +1,8 @@
+name = "traffic-splitting-worker-dev"
+main = "src/index.ts"
+compatibility_date = "2026-05-03"
+
+[[kv_namespaces]]
+binding = "EXPERIMENTS_KV"
+id = "462cd99ae90048f5828a2ee6bc4aa7e5"
+preview_id = "462cd99ae90048f5828a2ee6bc4aa7e5"

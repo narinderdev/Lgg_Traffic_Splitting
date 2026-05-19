@@ -1,0 +1,17 @@
+name = "traffic-splitting-worker"
+main = "src/index.ts"
+compatibility_date = "2026-05-03"
+
+[[kv_namespaces]]
+binding = "EXPERIMENTS_KV"
+id = "462cd99ae90048f5828a2ee6bc4aa7e5"
+preview_id = "462cd99ae90048f5828a2ee6bc4aa7e5"
+
+[[queues.producers]]
+binding = "IMPRESSIONS_QUEUE"
+queue = "traffic-splitting-impressions"
+
+[[queues.consumers]]
+queue = "traffic-splitting-impressions"
+max_batch_size = 50
+max_batch_timeout = 5

@@ -1,0 +1,17 @@
+{
+  "name": "traffic-splitting-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:remote": "wrangler dev -c wrangler.dev.toml --remote",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260512.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.66.0"
+  }
+}
