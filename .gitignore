@@ -1,0 +1,11 @@
+.DS_Store
+Backend/.env
+Backend/.venv/
+Backend/__pycache__/
+Backend/.pytest_cache/
+Frontend/.env
+Frontend/node_modules/
+Frontend/dist/
+Worker/.dev.vars
+Worker/node_modules/
+Worker/.wrangler/
