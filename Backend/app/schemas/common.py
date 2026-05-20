@@ -110,16 +110,27 @@ class MonitoringAlert(ORMModel):
     threshold: float | int | None = None
 
 
+class MonitoringThresholds(ORMModel):
+    lookback_minutes: int
+    min_recent_impressions: int
+    min_traffic_ratio: float
+    max_ingest_rejections: int
+    max_cloudflare_sync_failures: int
+
+
 class MonitoringSummary(ORMModel):
     generated_at: datetime
     lookback_minutes: int
     recent_impressions: int
     previous_impressions: int
     recent_conversions: int
+    traffic_ratio: float | None = None
+    recent_conversion_rate: float | None = None
     active_experiments: int
     paused_experiments: int
     ingest_rejections: int
     cloudflare_sync_failures: int
+    thresholds: MonitoringThresholds
     alerts: list[MonitoringAlert] = Field(default_factory=list)
 
 

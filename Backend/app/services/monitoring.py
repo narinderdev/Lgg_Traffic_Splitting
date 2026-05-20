@@ -9,7 +9,7 @@ from app.core.config import get_settings
 from app.models.conversion import Conversion
 from app.models.experiment import Experiment
 from app.models.impression import Impression
-from app.schemas.common import MonitoringAlert, MonitoringSummary
+from app.schemas.common import MonitoringAlert, MonitoringSummary, MonitoringThresholds
 from app.services.metrics import CLOUDFLARE_SYNC_COUNT, INGEST_REJECTED_COUNT, get_counter_value
 
 settings = get_settings()
@@ -45,6 +45,12 @@ async def get_monitoring_summary(session: AsyncSession) -> MonitoringSummary:
         get_counter_value(CLOUDFLARE_SYNC_COUNT, operation="upsert", status="failure")
         + get_counter_value(CLOUDFLARE_SYNC_COUNT, operation="delete", status="failure")
     )
+    traffic_ratio = None
+    if (previous_impressions or 0) > 0:
+        traffic_ratio = round((recent_impressions or 0) / (previous_impressions or 1), 4)
+    recent_conversion_rate = None
+    if (recent_impressions or 0) > 0:
+        recent_conversion_rate = round((recent_conversions or 0) / (recent_impressions or 1), 4)
 
     alerts: list[MonitoringAlert] = []
 
@@ -59,15 +65,14 @@ async def get_monitoring_summary(session: AsyncSession) -> MonitoringSummary:
             )
         )
 
-    if (previous_impressions or 0) > 0:
-        traffic_ratio = (recent_impressions or 0) / (previous_impressions or 1)
+    if traffic_ratio is not None:
         if traffic_ratio < settings.alert_min_traffic_ratio:
             alerts.append(
                 MonitoringAlert(
                     code="traffic_drop",
                     severity="critical",
                     message="Recent traffic dropped compared with the previous lookback window.",
-                    current_value=round(traffic_ratio, 4),
+                    current_value=traffic_ratio,
                     threshold=settings.alert_min_traffic_ratio,
                 )
             )
@@ -100,9 +105,18 @@ async def get_monitoring_summary(session: AsyncSession) -> MonitoringSummary:
         recent_impressions=int(recent_impressions or 0),
         previous_impressions=int(previous_impressions or 0),
         recent_conversions=int(recent_conversions or 0),
+        traffic_ratio=traffic_ratio,
+        recent_conversion_rate=recent_conversion_rate,
         active_experiments=int(active_experiments or 0),
         paused_experiments=int(paused_experiments or 0),
         ingest_rejections=int(ingest_rejections),
         cloudflare_sync_failures=int(cloudflare_sync_failures),
+        thresholds=MonitoringThresholds(
+            lookback_minutes=settings.alert_lookback_minutes,
+            min_recent_impressions=settings.alert_min_recent_impressions,
+            min_traffic_ratio=settings.alert_min_traffic_ratio,
+            max_ingest_rejections=settings.alert_max_ingest_rejections,
+            max_cloudflare_sync_failures=settings.alert_max_cloudflare_sync_failures,
+        ),
         alerts=alerts,
     )

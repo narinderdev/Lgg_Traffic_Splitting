@@ -40,6 +40,9 @@
 - Multivariate preview / combination generation endpoint implemented
 - `GET /experiments` schema serialization bug fixed after variant metadata refactor
 - Experiment list, reporting, monitoring, and conversion/significance views verified from the frontend
+- Frontend multivariate builder implemented for factor/option authoring and combination generation
+- Frontend multivariate reporting panels implemented for factor-level and combination-level performance
+- Monitoring UI now exposes thresholds, traffic ratio, conversion rate, and alert dispatch action
 
 ## Completed With Dev-Only Workaround
 
@@ -56,8 +59,7 @@
 - Dedicated production auth values should replace local dev keys
 - Production Redis setup is not finalized
 - Automated backend/frontend production deployment targets are not implemented because no hosting platform is chosen yet
-- Alert routing policies, dashboards, and on-call thresholds are not implemented beyond the in-app metrics/summary/webhook foundation
-- Full multivariate editor UX and dedicated multivariate reporting screens are not implemented
+- Alert routing policies, dashboards in external observability tooling, and on-call thresholds are not implemented beyond the in-app metrics/summary/webhook foundation
 
 ## Out Of Scope / Not Implemented Yet
 
@@ -73,3 +75,4 @@
 - CI now validates backend, frontend, and worker on GitHub Actions
 - Conversion significance is available once conversion events are ingested into the new `/ingest/conversions` endpoint
 - Multivariate combinations can be generated through the API and forwarded by the worker via `mv_*` query params
+- The frontend now supports multivariate factor authoring and shows factor/combo performance summaries from variant-level stats

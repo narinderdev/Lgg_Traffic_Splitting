@@ -358,6 +358,20 @@ select:focus {
   gap: 14px;
 }
 
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.option-card {
+  border: 1px solid rgba(18, 35, 58, 0.08);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(18, 35, 58, 0.03);
+}
+
 .variant-card {
   border-radius: 20px;
   padding: 18px;
@@ -462,6 +476,10 @@ select:focus {
   grid-template-columns: 120px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+}
+
+.timeline__row--stacked {
+  grid-template-columns: 180px minmax(0, 1fr);
 }
 
 .timeline__badge {

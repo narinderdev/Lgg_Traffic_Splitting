@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect, useState } from 'react'
+import { startTransition, useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import './App.css'
 
 type ExperimentStatus = 'active' | 'paused'
@@ -10,6 +10,11 @@ type Segments = {
   traffic_sources: TrafficSource[]
 }
 
+type VariantMetadata = {
+  multivariate?: boolean
+  multivariate_values?: Record<string, string>
+}
+
 type Variant = {
   id?: string
   name: string
@@ -17,6 +22,7 @@ type Variant = {
   hyros_tag: string
   weight: number
   is_control: boolean
+  metadata?: VariantMetadata
 }
 
 type Experiment = {
@@ -78,6 +84,32 @@ type MonitoringSummary = {
     current_value: number | null
     threshold: number | null
   }>
+  traffic_ratio: number | null
+  recent_conversion_rate: number | null
+  thresholds: {
+    lookback_minutes: number
+    min_recent_impressions: number
+    min_traffic_ratio: number
+    max_ingest_rejections: number
+    max_cloudflare_sync_failures: number
+  }
+}
+
+type MultivariateFactorOption = {
+  key: string
+  label: string
+}
+
+type MultivariateFactor = {
+  key: string
+  label: string
+  options: MultivariateFactorOption[]
+}
+
+type MultivariateBuilder = {
+  destination_url: string
+  hyros_tag_prefix: string
+  factors: MultivariateFactor[]
 }
 
 const STORAGE_KEYS = {
@@ -112,6 +144,7 @@ const blankExperiment = (): Experiment => ({
       hyros_tag: 'control',
       weight: 50,
       is_control: true,
+      metadata: {},
     },
     {
       name: 'Variant A',
@@ -119,6 +152,30 @@ const blankExperiment = (): Experiment => ({
       hyros_tag: 'variant-a',
       weight: 50,
       is_control: false,
+      metadata: {},
+    },
+  ],
+})
+
+const blankMultivariateBuilder = (destinationUrl = 'https://example.com/landing'): MultivariateBuilder => ({
+  destination_url: destinationUrl,
+  hyros_tag_prefix: 'mv',
+  factors: [
+    {
+      key: 'headline',
+      label: 'Headline',
+      options: [
+        { key: 'a', label: 'A' },
+        { key: 'b', label: 'B' },
+      ],
+    },
+    {
+      key: 'cta',
+      label: 'CTA',
+      options: [
+        { key: 'x', label: 'X' },
+        { key: 'y', label: 'Y' },
+      ],
     },
   ],
 })
@@ -137,12 +194,17 @@ function App() {
   const [stats, setStats] = useState<StatsSummary | null>(null)
   const [dailyCounts, setDailyCounts] = useState<DailyCount[]>([])
   const [monitoring, setMonitoring] = useState<MonitoringSummary | null>(null)
+  const [multivariateBuilder, setMultivariateBuilder] = useState<MultivariateBuilder>(
+    blankMultivariateBuilder(blankExperiment().entry_url),
+  )
   const [dateRange, setDateRange] = useState(defaultDateRange())
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
   const [isRefreshingStats, setIsRefreshingStats] = useState(false)
   const [isRefreshingMonitoring, setIsRefreshingMonitoring] = useState(false)
+  const [isGeneratingVariants, setIsGeneratingVariants] = useState(false)
+  const [isDispatchingAlerts, setIsDispatchingAlerts] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -231,6 +293,7 @@ function App() {
           setSelectedId(preferred.id!)
           setIsCreating(false)
           setDraft(preferred)
+          setMultivariateBuilder(deriveMultivariateBuilder(preferred))
         })
         await loadStats(preferred.id)
       }
@@ -258,6 +321,7 @@ function App() {
     setIsCreating(false)
     setSelectedId(experiment.id)
     setDraft(structuredClone(experiment))
+    setMultivariateBuilder(deriveMultivariateBuilder(experiment))
     await loadStats(experiment.id)
   }
 
@@ -302,6 +366,7 @@ function App() {
           hyros_tag: `variant-${current.variants.length + 1}`,
           weight: 0,
           is_control: false,
+          metadata: {},
         },
       ])
       return { ...current, variants: nextVariants }
@@ -319,7 +384,9 @@ function App() {
     setError(null)
     setSelectedId(null)
     setIsCreating(true)
-    setDraft(blankExperiment())
+    const nextDraft = blankExperiment()
+    setDraft(nextDraft)
+    setMultivariateBuilder(blankMultivariateBuilder(nextDraft.entry_url))
     setStats(null)
     setDailyCounts([])
   }
@@ -335,6 +402,7 @@ function App() {
           ...variant,
           weight: Number(variant.weight),
           hyros_tag: variant.hyros_tag || null,
+          metadata: variant.metadata || {},
         })),
       }
 
@@ -389,11 +457,52 @@ function App() {
     }
   }
 
+  async function generateMultivariateVariants() {
+    setIsGeneratingVariants(true)
+    setError(null)
+    try {
+      const preview = await apiRequest<Variant[]>('/experiments/multivariate/preview', {
+        method: 'POST',
+        body: JSON.stringify(multivariateBuilder),
+      })
+      setDraft((current) => ({
+        ...current,
+        variants: preview.map((variant, index) => ({
+          ...variant,
+          id: current.variants[index]?.id,
+        })),
+      }))
+    } catch (requestError) {
+      setError(getErrorMessage(requestError))
+    } finally {
+      setIsGeneratingVariants(false)
+    }
+  }
+
+  async function dispatchAlerts() {
+    setIsDispatchingAlerts(true)
+    setError(null)
+    try {
+      const summary = await apiRequest<MonitoringSummary>('/monitoring/alerts/dispatch', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      setMonitoring(summary)
+    } catch (requestError) {
+      setError(getErrorMessage(requestError))
+    } finally {
+      setIsDispatchingAlerts(false)
+    }
+  }
+
   const totalWeight = draft.variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0)
   const totalImpressions = stats?.totals.reduce((sum, item) => sum + item.count, 0) ?? 0
   const totalConversions = stats?.conversions.reduce((sum, item) => sum + item.conversions, 0) ?? 0
   const winningVariant = stats?.conversions.find((item) => !item.is_control && item.is_significant && (item.uplift_vs_control || 0) > 0) ?? null
   const groupedDailyCounts = groupDailyCounts(dailyCounts)
+  const multivariateFactorPerformance = buildMultivariateFactorPerformance(draft.variants, stats)
+  const multivariateCombinations = buildMultivariateCombinationPerformance(draft.variants, stats)
+  const hasMultivariateDraft = multivariateCombinations.length > 0
 
   return (
     <div className="app-shell">
@@ -626,6 +735,16 @@ function App() {
                       Control variant
                     </label>
                   </div>
+
+                  {variant.metadata?.multivariate_values ? (
+                    <div className="chip-row">
+                      {Object.entries(variant.metadata.multivariate_values).map(([key, value]) => (
+                        <span key={`${variant.name}-${key}`} className="timeline__badge">
+                          {humanizeLabel(key)}: {value}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -646,6 +765,201 @@ function App() {
               ) : null}
             </div>
           </article>
+        </section>
+
+        <section className="panel panel--full">
+          <div className="section-heading">
+            <div>
+              <h3>Multivariate builder</h3>
+              <p>Generate equal-weight combination variants from factors, then save them like any other experiment.</p>
+            </div>
+            <div className="inline-actions">
+              <span className={`metric ${hasMultivariateDraft ? 'metric--ok' : 'metric--warn'}`}>
+                {hasMultivariateDraft ? 'Multivariate variants loaded' : 'Single-variant mode'}
+              </span>
+              <button
+                className="button button--ghost"
+                type="button"
+                onClick={() => void generateMultivariateVariants()}
+                disabled={isGeneratingVariants}
+              >
+                {isGeneratingVariants ? 'Generating...' : 'Generate combinations'}
+              </button>
+            </div>
+          </div>
+
+          <div className="form-grid">
+            <label className="form-grid__wide">
+              Destination URL
+              <input
+                value={multivariateBuilder.destination_url}
+                onChange={(event) =>
+                  setMultivariateBuilder((current) => ({ ...current, destination_url: event.target.value }))
+                }
+              />
+            </label>
+            <label>
+              Hyros tag prefix
+              <input
+                value={multivariateBuilder.hyros_tag_prefix}
+                onChange={(event) =>
+                  setMultivariateBuilder((current) => ({ ...current, hyros_tag_prefix: event.target.value }))
+                }
+              />
+            </label>
+          </div>
+
+          <div className="variant-stack">
+            {multivariateBuilder.factors.map((factor, factorIndex) => (
+              <div key={`${factor.key}-${factorIndex}`} className="variant-card">
+                <div className="variant-card__header">
+                  <h4>{factor.label || `Factor ${factorIndex + 1}`}</h4>
+                  {multivariateBuilder.factors.length > 2 ? (
+                    <button
+                      className="text-button"
+                      type="button"
+                      onClick={() =>
+                        setMultivariateBuilder((current) => ({
+                          ...current,
+                          factors: current.factors.filter((_, index) => index !== factorIndex),
+                        }))
+                      }
+                    >
+                      Remove factor
+                    </button>
+                  ) : null}
+                </div>
+                <div className="form-grid">
+                  <label>
+                    Factor key
+                    <input
+                      value={factor.key}
+                      onChange={(event) =>
+                        updateMultivariateFactor(setMultivariateBuilder, factorIndex, 'key', slugifyToken(event.target.value))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Factor label
+                    <input
+                      value={factor.label}
+                      onChange={(event) =>
+                        updateMultivariateFactor(setMultivariateBuilder, factorIndex, 'label', event.target.value)
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="option-grid">
+                  {factor.options.map((option, optionIndex) => (
+                    <div key={`${factor.key}-${option.key}-${optionIndex}`} className="option-card">
+                      <label>
+                        Option key
+                        <input
+                          value={option.key}
+                          onChange={(event) =>
+                            updateMultivariateOption(
+                              setMultivariateBuilder,
+                              factorIndex,
+                              optionIndex,
+                              'key',
+                              slugifyToken(event.target.value),
+                            )
+                          }
+                        />
+                      </label>
+                      <label>
+                        Option label
+                        <input
+                          value={option.label}
+                          onChange={(event) =>
+                            updateMultivariateOption(
+                              setMultivariateBuilder,
+                              factorIndex,
+                              optionIndex,
+                              'label',
+                              event.target.value,
+                            )
+                          }
+                        />
+                      </label>
+                      {factor.options.length > 2 ? (
+                        <button
+                          className="text-button"
+                          type="button"
+                          onClick={() =>
+                            setMultivariateBuilder((current) => ({
+                              ...current,
+                              factors: current.factors.map((item, index) =>
+                                index === factorIndex
+                                  ? { ...item, options: item.options.filter((_, idx) => idx !== optionIndex) }
+                                  : item,
+                              ),
+                            }))
+                          }
+                        >
+                          Remove option
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  className="button button--ghost"
+                  type="button"
+                  onClick={() =>
+                    setMultivariateBuilder((current) => ({
+                      ...current,
+                      factors: current.factors.map((item, index) =>
+                        index === factorIndex
+                          ? {
+                              ...item,
+                              options: [
+                                ...item.options,
+                                {
+                                  key: `option-${item.options.length + 1}`,
+                                  label: `Option ${item.options.length + 1}`,
+                                },
+                              ],
+                            }
+                          : item,
+                      ),
+                    }))
+                  }
+                >
+                  Add option
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="panel-actions">
+            <button
+              className="button button--ghost"
+              type="button"
+              onClick={() =>
+                setMultivariateBuilder((current) => ({
+                  ...current,
+                  factors: [
+                    ...current.factors,
+                    {
+                      key: `factor-${current.factors.length + 1}`,
+                      label: `Factor ${current.factors.length + 1}`,
+                      options: [
+                        { key: 'a', label: 'A' },
+                        { key: 'b', label: 'B' },
+                      ],
+                    },
+                  ],
+                }))
+              }
+            >
+              Add factor
+            </button>
+            <span className="muted">
+              {estimateCombinationCount(multivariateBuilder.factors)} combinations will be generated at equalized
+              weights.
+            </span>
+          </div>
         </section>
 
         <section className="panel panel--full">
@@ -794,6 +1108,52 @@ function App() {
                   </div>
                 </div>
               </div>
+
+              {hasMultivariateDraft ? (
+                <div className="reporting-grid">
+                  <div className="report-panel">
+                    <h4>Multivariate factor performance</h4>
+                    <div className="timeline">
+                      {multivariateFactorPerformance.map((factor) => (
+                        <div key={factor.factorKey} className="timeline__row timeline__row--stacked">
+                          <strong>{factor.factorLabel}</strong>
+                          <div>
+                            {factor.options.map((option) => (
+                              <span key={`${factor.factorKey}-${option.optionKey}`} className="timeline__badge">
+                                {option.optionLabel}: {option.impressions} imp · {option.conversions} conv ·{' '}
+                                {(option.conversionRate * 100).toFixed(2)}% CVR
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="report-panel">
+                    <h4>Combination performance</h4>
+                    <div className="timeline">
+                      {multivariateCombinations.map((combination) => (
+                        <div key={combination.variantId} className="timeline__row timeline__row--stacked">
+                          <strong>{combination.variantName}</strong>
+                          <div>
+                            <span className="timeline__badge">{combination.impressions} impressions</span>
+                            <span className="timeline__badge">{combination.conversions} conversions</span>
+                            <span className="timeline__badge">
+                              {(combination.conversionRate * 100).toFixed(2)}% CVR
+                            </span>
+                            {Object.entries(combination.assignments).map(([key, value]) => (
+                              <span key={`${combination.variantId}-${key}`} className="timeline__badge">
+                                {humanizeLabel(key)}: {value}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </>
           )}
         </section>
@@ -804,9 +1164,19 @@ function App() {
               <h3>Monitoring</h3>
               <p>Recent traffic health, ingest rejection counts, and Cloudflare sync failures.</p>
             </div>
-            <button className="button button--ghost" type="button" onClick={() => void loadMonitoring()} disabled={isRefreshingMonitoring}>
-              {isRefreshingMonitoring ? 'Refreshing...' : 'Refresh monitoring'}
-            </button>
+            <div className="inline-actions">
+              <button className="button button--ghost" type="button" onClick={() => void loadMonitoring()} disabled={isRefreshingMonitoring}>
+                {isRefreshingMonitoring ? 'Refreshing...' : 'Refresh monitoring'}
+              </button>
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={() => void dispatchAlerts()}
+                disabled={isDispatchingAlerts || !monitoring?.alerts.length}
+              >
+                {isDispatchingAlerts ? 'Dispatching...' : 'Dispatch alerts'}
+              </button>
+            </div>
           </div>
 
           <div className="stats-grid">
@@ -824,6 +1194,24 @@ function App() {
               <span>Operational alerts</span>
               <strong>{monitoring?.alerts.length ?? 0}</strong>
               <small>{monitoring?.alerts.map((alert) => alert.code).join(' · ') || 'No active alerts'}</small>
+            </div>
+            <div className="stat-card">
+              <span>Traffic ratio</span>
+              <strong>{monitoring?.traffic_ratio !== null && monitoring?.traffic_ratio !== undefined ? monitoring.traffic_ratio.toFixed(2) : 'n/a'}</strong>
+              <small>
+                Threshold: {monitoring?.thresholds.min_traffic_ratio ?? 0}
+              </small>
+            </div>
+            <div className="stat-card">
+              <span>Recent conversion rate</span>
+              <strong>
+                {monitoring?.recent_conversion_rate !== null && monitoring?.recent_conversion_rate !== undefined
+                  ? `${(monitoring.recent_conversion_rate * 100).toFixed(2)}%`
+                  : 'n/a'}
+              </strong>
+              <small>
+                Based on the last {monitoring?.lookback_minutes ?? 0} minute window
+              </small>
             </div>
           </div>
 
@@ -848,17 +1236,42 @@ function App() {
               </div>
             </div>
             <div className="report-panel">
+              <h4>Thresholds</h4>
+              <div className="timeline">
+                <div className="timeline__row">
+                  <strong>Traffic</strong>
+                  <div>
+                    <span className="timeline__badge">min recent impressions: {monitoring?.thresholds.min_recent_impressions ?? 0}</span>
+                    <span className="timeline__badge">min traffic ratio: {monitoring?.thresholds.min_traffic_ratio ?? 0}</span>
+                  </div>
+                </div>
+                <div className="timeline__row">
+                  <strong>Failures</strong>
+                  <div>
+                    <span className="timeline__badge">max ingest rejections: {monitoring?.thresholds.max_ingest_rejections ?? 0}</span>
+                    <span className="timeline__badge">max sync failures: {monitoring?.thresholds.max_cloudflare_sync_failures ?? 0}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="report-panel">
               <h4>Triggered alerts</h4>
               <div className="timeline">
                 {monitoring?.alerts.length ? (
                   monitoring.alerts.map((alert) => (
-                    <div key={alert.code} className="timeline__row">
+                    <div key={alert.code} className="timeline__row timeline__row--stacked">
                       <strong>{alert.code}</strong>
                       <div>
                         <span className={`timeline__badge ${alert.severity === 'critical' ? 'timeline__badge--danger' : ''}`}>
                           {alert.severity}
                         </span>
                         <span className="timeline__badge">{alert.message}</span>
+                        {alert.current_value !== null ? (
+                          <span className="timeline__badge">current: {alert.current_value}</span>
+                        ) : null}
+                        {alert.threshold !== null ? (
+                          <span className="timeline__badge">threshold: {alert.threshold}</span>
+                        ) : null}
                       </div>
                     </div>
                   ))
@@ -898,8 +1311,157 @@ function groupDailyCounts(dailyCounts: DailyCount[]) {
   return Array.from(grouped.entries()).map(([day, items]) => ({ day, items }))
 }
 
+function deriveMultivariateBuilder(experiment: Experiment): MultivariateBuilder {
+  const firstVariant = experiment.variants[0]
+  const variantAssignments = experiment.variants
+    .map((variant) => variant.metadata?.multivariate_values)
+    .filter((value): value is Record<string, string> => Boolean(value && Object.keys(value).length))
+
+  if (!firstVariant || variantAssignments.length === 0) {
+    return blankMultivariateBuilder(experiment.entry_url)
+  }
+
+  const optionMap = new Map<string, Set<string>>()
+  for (const assignments of variantAssignments) {
+    for (const [factorKey, optionKey] of Object.entries(assignments)) {
+      if (!optionMap.has(factorKey)) {
+        optionMap.set(factorKey, new Set<string>())
+      }
+      optionMap.get(factorKey)!.add(optionKey)
+    }
+  }
+
+  return {
+    destination_url: firstVariant.destination_url,
+    hyros_tag_prefix: firstVariant.hyros_tag.split('-')[0] || 'mv',
+    factors: Array.from(optionMap.entries()).map(([factorKey, optionKeys]) => ({
+      key: factorKey,
+      label: titleizeToken(factorKey),
+      options: Array.from(optionKeys).map((optionKey) => ({
+        key: optionKey,
+        label: titleizeToken(optionKey),
+      })),
+    })),
+  }
+}
+
+function updateMultivariateFactor(
+  setBuilder: Dispatch<SetStateAction<MultivariateBuilder>>,
+  factorIndex: number,
+  field: 'key' | 'label',
+  value: string,
+) {
+  setBuilder((current) => ({
+    ...current,
+    factors: current.factors.map((factor, index) =>
+      index === factorIndex ? { ...factor, [field]: value } : factor,
+    ),
+  }))
+}
+
+function updateMultivariateOption(
+  setBuilder: Dispatch<SetStateAction<MultivariateBuilder>>,
+  factorIndex: number,
+  optionIndex: number,
+  field: 'key' | 'label',
+  value: string,
+) {
+  setBuilder((current) => ({
+    ...current,
+    factors: current.factors.map((factor, index) =>
+      index === factorIndex
+        ? {
+            ...factor,
+            options: factor.options.map((option, idx) =>
+              idx === optionIndex ? { ...option, [field]: value } : option,
+            ),
+          }
+        : factor,
+    ),
+  }))
+}
+
+function estimateCombinationCount(factors: MultivariateFactor[]) {
+  return factors.reduce((product, factor) => product * Math.max(0, factor.options.length), 1)
+}
+
+function buildMultivariateFactorPerformance(variants: Variant[], stats: StatsSummary | null) {
+  if (!stats) return []
+
+  const totalsByVariant = new Map(stats.totals.map((item) => [item.variant_id, item.count]))
+  const conversionsByVariant = new Map(stats.conversions.map((item) => [item.variant_id, item.conversions]))
+  const factors = new Map<string, Map<string, { impressions: number; conversions: number }>>()
+
+  for (const variant of variants) {
+    if (!variant.id || !variant.metadata?.multivariate_values) continue
+    const impressions = totalsByVariant.get(variant.id) || 0
+    const conversions = conversionsByVariant.get(variant.id) || 0
+
+    for (const [factorKey, optionKey] of Object.entries(variant.metadata.multivariate_values)) {
+      if (!factors.has(factorKey)) {
+        factors.set(factorKey, new Map())
+      }
+      const options = factors.get(factorKey)!
+      const current = options.get(optionKey) || { impressions: 0, conversions: 0 }
+      current.impressions += impressions
+      current.conversions += conversions
+      options.set(optionKey, current)
+    }
+  }
+
+  return Array.from(factors.entries()).map(([factorKey, options]) => ({
+    factorKey,
+    factorLabel: titleizeToken(factorKey),
+    options: Array.from(options.entries()).map(([optionKey, values]) => ({
+      optionKey,
+      optionLabel: titleizeToken(optionKey),
+      impressions: values.impressions,
+      conversions: values.conversions,
+      conversionRate: values.impressions > 0 ? values.conversions / values.impressions : 0,
+    })),
+  }))
+}
+
+function buildMultivariateCombinationPerformance(variants: Variant[], stats: StatsSummary | null) {
+  if (!stats) return []
+
+  const totalsByVariant = new Map(stats.totals.map((item) => [item.variant_id, item.count]))
+  const conversionsByVariant = new Map(stats.conversions.map((item) => [item.variant_id, item.conversions]))
+
+  return variants
+    .filter((variant) => variant.id && variant.metadata?.multivariate_values)
+    .map((variant) => {
+      const impressions = totalsByVariant.get(variant.id!) || 0
+      const conversions = conversionsByVariant.get(variant.id!) || 0
+      return {
+        variantId: variant.id!,
+        variantName: variant.name,
+        assignments: variant.metadata!.multivariate_values!,
+        impressions,
+        conversions,
+        conversionRate: impressions > 0 ? conversions / impressions : 0,
+      }
+    })
+}
+
 function humanizeLabel(value: string) {
   return value.replaceAll('_', ' ')
+}
+
+function titleizeToken(value: string) {
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((chunk) => `${chunk.slice(0, 1).toUpperCase()}${chunk.slice(1)}`)
+    .join(' ')
+}
+
+function slugifyToken(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-_]+/g, '-')
+    .replace(/-+/g, '-')
 }
 
 function getErrorMessage(value: unknown) {

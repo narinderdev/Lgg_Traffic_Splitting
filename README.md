@@ -16,6 +16,9 @@ Internal VWO replacement for URL-based traffic splitting.
 - Monitoring summary and alert-evaluation endpoints
 - Multivariate preview endpoint that generates factor combinations for use with the existing worker/variant model
 - Experiment list/detail serialization verified after the variant metadata schema refactor
+- Frontend multivariate builder for factor/option authoring and generated variant application
+- Frontend multivariate reporting panels for factor-level and combination-level performance
+- Monitoring UI support for threshold visibility, traffic/conversion ratios, and alert dispatch
 
 ## Project Structure
 
@@ -307,6 +310,8 @@ Example payload:
 
 The response returns generated combination variants with equalized weights and `multivariate_values` metadata. The worker automatically forwards these assignments as query params such as `mv_headline=a`.
 
+The frontend now includes a multivariate builder that calls this preview endpoint and applies the generated combinations into the experiment draft before save.
+
 ## Example Behavior
 
 If:
@@ -337,7 +342,7 @@ then it should redirect to the configured `entry_url`.
 - `/metrics` exposes Prometheus-compatible metrics for API traffic, ingest counts, and Cloudflare sync activity
 - Significance reporting currently uses a two-sided z-test against the control variant based on ingested conversion counts
 - Monitoring summaries evaluate configurable thresholds from env vars like `ALERT_LOOKBACK_MINUTES` and `ALERT_MIN_TRAFFIC_RATIO`
-- Multivariate support is currently a preview/generation workflow, not a dedicated GUI builder
+- Multivariate support now includes a frontend builder and reporting overlays, but it still uses the existing variant model under the hood
 - `GET /experiments`, frontend experiment loading, reporting, and monitoring are currently working in local development
 
 ## Remaining Work
@@ -347,5 +352,4 @@ then it should redirect to the configured `entry_url`.
 - Production hosting targets for backend and frontend
 - Live Cloudflare route/domain cutover for real entry traffic
 - Production secrets rotation process and deployment runbook
-- Broader monitoring dashboards/alert rules on top of `/metrics` and webhook alerts
-- A full multivariate GUI/editor and dedicated multivariate reporting screens
+- Broader monitoring dashboards/alert rules in external observability tooling on top of `/metrics` and webhook alerts
