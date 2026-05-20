@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 from time import perf_counter
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 from starlette.requests import Request
 
 from app.api.router import api_router
@@ -14,6 +16,15 @@ from app.services.metrics import REQUEST_COUNT, REQUEST_LATENCY
 settings = get_settings()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("traffic_splitting.api")
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment,
+        send_default_pii=True,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        integrations=[FastApiIntegration()],
+    )
 
 app = FastAPI(
     title="Traffic Splitting API",

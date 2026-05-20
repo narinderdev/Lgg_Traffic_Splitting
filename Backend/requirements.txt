@@ -8,5 +8,6 @@ pydantic-settings>=2.11.0
 psycopg[binary]>=3.2.12
 python-multipart>=0.0.20
 redis>=7.0.1
+sentry-sdk[fastapi]>=2.30.0
 sqlalchemy>=2.0.44
 uvicorn[standard]>=0.38.0
