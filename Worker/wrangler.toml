@@ -2,6 +2,11 @@ name = "traffic-splitting-worker"
 main = "src/index.ts"
 compatibility_date = "2026-05-03"
 
+[vars]
+BACKEND_BASE_URL = "https://lgg-traffic-splitting-api.onrender.com"
+INGEST_API_KEY = "6c9f91e9500e40ae4832fbf081940e05e299d237cd7efb07"
+ASSIGNMENT_TTL_SECONDS = "2592000"
+
 [[kv_namespaces]]
 binding = "EXPERIMENTS_KV"
 id = "462cd99ae90048f5828a2ee6bc4aa7e5"
