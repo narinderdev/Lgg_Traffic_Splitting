@@ -48,6 +48,7 @@
 - Queue-based impression ingest validated in deployed environment
 - Backend Sentry integration implemented and verified with a real event
 - Worker Sentry integration implemented and verified with a real event
+- Slack webhook alerting implemented and verified from monitoring dispatch
 
 ## Completed With Dev-Only Workaround
 
@@ -56,13 +57,12 @@
 ## Pending
 
 - Custom worker domain binding is deferred; `workers.dev` remains the active public endpoint
-- External metrics dashboards/alerting beyond Sentry and the in-app monitoring UI are not yet set up
+- External metrics dashboards beyond Sentry, Slack, and the in-app monitoring UI are not yet set up
 - Temporary backend and worker `/debug-sentry` routes should be removed after the manager demo window
 - Alert routing policies and external dashboard thresholds are not implemented beyond the current Sentry + in-app monitoring foundation
 
 ## Out Of Scope / Not Implemented Yet
 
-- Slack-specific alert destinations
 - Custom domain rollout
 - Dedicated Grafana/Datadog metrics dashboard stack
 
@@ -78,4 +78,5 @@
 - Multivariate combinations can be generated through the API and forwarded by the worker via `mv_*` query params
 - The frontend now supports multivariate factor authoring and shows factor/combo performance summaries from variant-level stats
 - Backend and worker both have Sentry-based error observability enabled
+- Monitoring alerts can now be delivered to Slack through an incoming webhook
 - Temporary `/debug-sentry` routes currently exist only to support demonstration/verification and should not remain long-term

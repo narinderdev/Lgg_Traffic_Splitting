@@ -22,6 +22,7 @@ Internal VWO replacement for URL-based traffic splitting.
 - Render deployment for frontend and backend
 - Cloudflare Worker/KV/Queue deployment
 - Sentry error monitoring for backend and Worker
+- Slack alert delivery for monitoring dispatch
 
 ## Project Structure
 
@@ -272,12 +273,13 @@ Currently enabled:
 - Sentry for Worker exceptions/traces
 - built-in backend `/metrics`
 - built-in monitoring summary UI in the frontend
+- Slack incoming webhook alerts from `/monitoring/alerts/dispatch`
 
 Not yet added:
 
 - Grafana/Prometheus dashboards
 - Datadog dashboards
-- custom alert routing beyond the current in-app/webhook/Sentry setup
+- richer alert routing/policy management beyond the current Slack webhook + Sentry setup
 
 ## Recommended Local Test Flow
 

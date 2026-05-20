@@ -37,6 +37,7 @@ The core MVP is implemented, deployed, and validated end-to-end.
 - monitoring summary in the deployed frontend
 - Sentry error monitoring in the deployed backend
 - Sentry error monitoring in the deployed Worker
+- Slack alert delivery for monitoring alerts
 
 ## Deployment Layout
 
@@ -78,6 +79,8 @@ Important variables:
 - `CLOUDFLARE_KV_NAMESPACE_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `STATS_CACHE_TTL_SECONDS`
+- `ALERT_WEBHOOK_URL`
+- `ALERT_WEBHOOK_KIND`
 - `SENTRY_DSN`
 - `SENTRY_ENVIRONMENT`
 - `SENTRY_TRACES_SAMPLE_RATE`
@@ -255,6 +258,7 @@ Current monitoring stack:
 - in-app monitoring summary UI
 - Prometheus-style `/metrics`
 - Sentry for exception observability
+- Slack webhook alert delivery
 
 Grafana/Datadog-style external metrics dashboards are still optional.
 
@@ -341,10 +345,19 @@ Check:
 - Worker redeployed after adding the secret
 - `/debug-sentry` on worker was called with `Authorization: Bearer <INGEST_API_KEY>`
 
+### Monitoring alerts do not reach Slack
+
+Check:
+
+- `ALERT_WEBHOOK_URL` is set to the Slack incoming webhook URL
+- `ALERT_WEBHOOK_KIND=slack`
+- backend was redeployed after updating env vars
+- at least one alert condition is active before calling `POST /monitoring/alerts/dispatch`
+
 ## Remaining Optional Work
 
 - bind the worker to a custom project domain instead of `workers.dev`
-- add an external observability stack such as Grafana/Prometheus, Datadog, or Sentry
+- add external metrics dashboards/alerts in Grafana/Prometheus or Datadog if desired
 - add metrics dashboards/alerting on top of `/metrics` in Grafana/Datadog if desired
 - expand multivariate editing/reporting UX further
 - write a more formal operations/rollback SOP if required by the team
@@ -366,5 +379,6 @@ Validated in the deployed stack:
 - monitoring
 - backend Sentry
 - worker Sentry
+- Slack alert delivery
 
 Remaining work is operational polish, optional observability, and optional domain customization.
