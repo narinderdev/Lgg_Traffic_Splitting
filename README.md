@@ -19,6 +19,9 @@ Internal VWO replacement for URL-based traffic splitting.
 - Frontend multivariate builder for factor/option authoring and generated variant application
 - Frontend multivariate reporting panels for factor-level and combination-level performance
 - Monitoring UI support for threshold visibility, traffic/conversion ratios, and alert dispatch
+- Render deployment for frontend and backend
+- Cloudflare Worker/KV/Queue deployment
+- Sentry error monitoring for backend and Worker
 
 ## Project Structure
 
@@ -26,6 +29,15 @@ Internal VWO replacement for URL-based traffic splitting.
 - [Frontend](./Frontend)
 - [Worker](./Worker)
 - [docs.md](./docs.md)
+- [handoff.md](./handoff.md)
+
+## Current Deployed Endpoints
+
+- Frontend: `https://lgg-traffic-splitting-frontend.onrender.com`
+- Backend: `https://lgg-traffic-splitting-api.onrender.com`
+- Worker: `https://traffic-splitting-worker.developer-c62.workers.dev`
+- Example live test URL:
+  `https://traffic-splitting-worker.developer-c62.workers.dev/new-entry-slug?utm_source=google&utm_medium=cpc`
 
 ## Local Development Runbook
 
@@ -68,6 +80,7 @@ Optional monitoring/alerts values:
 ```env
 APP_ENV=development
 ALERT_WEBHOOK_URL=
+SENTRY_DSN=
 ```
 
 ### Terminal 3: Expose Backend Publicly For Worker Testing
@@ -91,6 +104,7 @@ BACKEND_BASE_URL=https://your-subdomain.ngrok-free.app
 INGEST_API_KEY=dev-ingest-key
 ASSIGNMENT_TTL_SECONDS=2592000
 ALLOW_DIRECT_INGEST_FALLBACK=true
+SENTRY_DSN=
 ```
 
 If the ngrok URL changes, update `BACKEND_BASE_URL` and restart the worker.
@@ -143,6 +157,13 @@ The worker now appends these query params to destination URLs so conversion even
 - `exp_id`
 - `variant_id`
 - `test_tag`
+
+For temporary Sentry verification in development/deployed demos:
+
+- backend exposes `GET /debug-sentry` and requires `Authorization: Bearer <ADMIN_API_KEY>`
+- worker exposes `GET /debug-sentry` and requires `Authorization: Bearer <INGEST_API_KEY>`
+
+These debug routes are temporary and should be removed after the verification/demo window.
 
 ## Cloudflare Worker Configuration
 
@@ -205,6 +226,20 @@ in [Worker/wrangler.toml](/Users/apnitormacmini3/Desktop/Traffic%20Splitting/Wor
 
 They must log into Wrangler using the Cloudflare account that owns those Worker/KV/Queue resources.
 
+### Current Production Worker Vars
+
+`Worker/wrangler.toml` currently includes:
+
+- `BACKEND_BASE_URL`
+- `INGEST_API_KEY`
+- `ASSIGNMENT_TTL_SECONDS`
+- `SENTRY_ENVIRONMENT`
+- `SENTRY_TRACES_SAMPLE_RATE`
+
+Worker production secret:
+
+- `SENTRY_DSN` via `wrangler secret put SENTRY_DSN`
+
 ## GitHub Actions CI/CD
 
 This repo now includes GitHub Actions workflows in [.github/workflows](./.github/workflows):
@@ -228,6 +263,21 @@ CLOUDFLARE_ACCOUNT_ID
 ```
 
 The deploy job uses `Worker/wrangler.toml`, so production KV and queue bindings must already be correct there.
+
+## External Observability
+
+Currently enabled:
+
+- Sentry for backend exceptions/traces
+- Sentry for Worker exceptions/traces
+- built-in backend `/metrics`
+- built-in monitoring summary UI in the frontend
+
+Not yet added:
+
+- Grafana/Prometheus dashboards
+- Datadog dashboards
+- custom alert routing beyond the current in-app/webhook/Sentry setup
 
 ## Recommended Local Test Flow
 

@@ -35,6 +35,8 @@ The core MVP is implemented, deployed, and validated end-to-end.
 - impression ingestion into backend/Postgres
 - reporting in the deployed frontend
 - monitoring summary in the deployed frontend
+- Sentry error monitoring in the deployed backend
+- Sentry error monitoring in the deployed Worker
 
 ## Deployment Layout
 
@@ -76,6 +78,9 @@ Important variables:
 - `CLOUDFLARE_KV_NAMESPACE_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `STATS_CACHE_TTL_SECONDS`
+- `SENTRY_DSN`
+- `SENTRY_ENVIRONMENT`
+- `SENTRY_TRACES_SAMPLE_RATE`
 
 ### Frontend
 
@@ -95,6 +100,12 @@ Important production vars:
 - `BACKEND_BASE_URL`
 - `INGEST_API_KEY`
 - `ASSIGNMENT_TTL_SECONDS`
+- `SENTRY_ENVIRONMENT`
+- `SENTRY_TRACES_SAMPLE_RATE`
+
+Managed in Cloudflare Worker secret store:
+
+- `SENTRY_DSN`
 
 ## Local Development
 
@@ -123,6 +134,7 @@ If backend env vars change:
    - `GET /`
    - `GET /health`
    - authenticated `GET /experiments`
+   - Sentry project receives real backend exceptions when tested
 
 Useful check:
 
@@ -159,6 +171,12 @@ If worker bindings or variables change:
 npx wrangler tail
 ```
 
+Worker Sentry secret update:
+
+```bash
+npx wrangler secret put SENTRY_DSN
+```
+
 ## Validation Checklist
 
 After any deployment, validate in this order:
@@ -174,6 +192,10 @@ After any deployment, validate in this order:
 5. Worker redirect:
    `https://traffic-splitting-worker.developer-c62.workers.dev/new-entry-slug?utm_source=google&utm_medium=cpc`
 6. Refresh reporting in the frontend and confirm impressions increase
+7. Backend Sentry verification:
+   `GET /debug-sentry` with admin auth
+8. Worker Sentry verification:
+   `GET /debug-sentry` on the worker with ingest auth
 
 ## Expected Runtime Behavior
 
@@ -221,8 +243,20 @@ Available backend endpoints:
 - `GET /metrics`
 - `GET /monitoring/summary`
 - `POST /monitoring/alerts/dispatch`
+- `GET /debug-sentry` (temporary demo/debug route; remove after verification window)
 
-Current monitoring is in-app plus metrics exposure. External observability tooling is optional and not required for the deployed MVP to function.
+External observability currently in place:
+
+- Sentry project for backend exceptions/traces
+- Sentry project for Worker exceptions/traces
+
+Current monitoring stack:
+
+- in-app monitoring summary UI
+- Prometheus-style `/metrics`
+- Sentry for exception observability
+
+Grafana/Datadog-style external metrics dashboards are still optional.
 
 ## Troubleshooting
 
@@ -278,10 +312,40 @@ Fix:
 - verify `ADMIN_API_KEY` in Render backend
 - verify `VITE_API_KEY` in Render frontend
 
+### Sentry is installed but no real backend event appears
+
+Check:
+
+- backend redeployed after `SENTRY_DSN` and dependency changes
+- `SENTRY_DSN` is set in Render backend env
+- `SENTRY_ENVIRONMENT=production`
+- `GET /debug-sentry` was called with valid admin auth
+
+### Worker Sentry deploy fails with `node:async_hooks`
+
+Cause:
+
+- Worker Sentry SDK requires Node compatibility
+
+Fix:
+
+- keep `compatibility_flags = ["nodejs_compat"]` in:
+  - [Worker/wrangler.toml](/Users/apnitormacmini3/Desktop/Traffic%20Splitting/Worker/wrangler.toml)
+  - [Worker/wrangler.dev.toml](/Users/apnitormacmini3/Desktop/Traffic%20Splitting/Worker/wrangler.dev.toml)
+
+### Worker Sentry is configured but no real event appears
+
+Check:
+
+- `SENTRY_DSN` uploaded with `wrangler secret put SENTRY_DSN`
+- Worker redeployed after adding the secret
+- `/debug-sentry` on worker was called with `Authorization: Bearer <INGEST_API_KEY>`
+
 ## Remaining Optional Work
 
 - bind the worker to a custom project domain instead of `workers.dev`
 - add an external observability stack such as Grafana/Prometheus, Datadog, or Sentry
+- add metrics dashboards/alerting on top of `/metrics` in Grafana/Datadog if desired
 - expand multivariate editing/reporting UX further
 - write a more formal operations/rollback SOP if required by the team
 
@@ -300,5 +364,7 @@ Validated in the deployed stack:
 - queue
 - reporting
 - monitoring
+- backend Sentry
+- worker Sentry
 
 Remaining work is operational polish, optional observability, and optional domain customization.

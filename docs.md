@@ -43,32 +43,33 @@
 - Frontend multivariate builder implemented for factor/option authoring and combination generation
 - Frontend multivariate reporting panels implemented for factor-level and combination-level performance
 - Monitoring UI now exposes thresholds, traffic ratio, conversion rate, and alert dispatch action
+- Render frontend/backend deployment validated
+- Cloudflare Worker/KV/Queue deployment validated
+- Queue-based impression ingest validated in deployed environment
+- Backend Sentry integration implemented and verified with a real event
+- Worker Sentry integration implemented and verified with a real event
 
 ## Completed With Dev-Only Workaround
 
-- Impression delivery from worker to backend works in development through direct HTTP ingest fallback
 - Remote worker preview testing works using public backend tunnel (`ngrok` / `trycloudflare`) instead of local-only backend access
 
 ## Pending
 
-- Production queue-based impression delivery needs final end-to-end validation on real Cloudflare Queue infrastructure
-- Production Worker deployment config still needs to be finalized against the live Cloudflare account/resources
-- Public deployment setup for backend and frontend is not finalized
-- Cloudflare route/domain setup for real entry traffic is not finalized
-- Production secrets management and rotation process is not documented
-- Dedicated production auth values should replace local dev keys
-- Production Redis setup is not finalized
-- Automated backend/frontend production deployment targets are not implemented because no hosting platform is chosen yet
-- Alert routing policies, dashboards in external observability tooling, and on-call thresholds are not implemented beyond the in-app metrics/summary/webhook foundation
+- Custom worker domain binding is deferred; `workers.dev` remains the active public endpoint
+- External metrics dashboards/alerting beyond Sentry and the in-app monitoring UI are not yet set up
+- Temporary backend and worker `/debug-sentry` routes should be removed after the manager demo window
+- Alert routing policies and external dashboard thresholds are not implemented beyond the current Sentry + in-app monitoring foundation
 
 ## Out Of Scope / Not Implemented Yet
 
 - Slack-specific alert destinations
+- Custom domain rollout
+- Dedicated Grafana/Datadog metrics dashboard stack
 
 ## Notes
 
-- The core MVP flow from the PDF is working in development
-- `impressions` table population and dashboard reporting are verified in development
+- The core MVP flow from the PDF is working in the deployed Render + Cloudflare setup
+- `impressions` table population and dashboard reporting are verified in the deployed setup
 - `GET /experiments` and experiment detail loading are verified again after the metadata/routing metadata schema fix
 - Current worker code includes a dev fallback path so local testing does not depend on Cloudflare Queue support in preview mode
 - Reporting summary/daily queries now read from rollup data instead of scanning the raw impressions table
@@ -76,3 +77,5 @@
 - Conversion significance is available once conversion events are ingested into the new `/ingest/conversions` endpoint
 - Multivariate combinations can be generated through the API and forwarded by the worker via `mv_*` query params
 - The frontend now supports multivariate factor authoring and shows factor/combo performance summaries from variant-level stats
+- Backend and worker both have Sentry-based error observability enabled
+- Temporary `/debug-sentry` routes currently exist only to support demonstration/verification and should not remain long-term
