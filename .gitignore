@@ -6,5 +6,4 @@ Backend/tests/__pycache__/
 Frontend/.env
 Frontend/node_modules/
 Worker/node_modules/
-Worker/.wrangler/
 *.pyc
