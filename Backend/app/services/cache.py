@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError

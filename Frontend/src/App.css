@@ -417,7 +417,7 @@ select:focus {
 }
 
 .stats-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .reporting-grid {
@@ -473,6 +473,16 @@ select:focus {
   background: rgba(18, 116, 161, 0.1);
   color: #165e81;
   font-size: 0.88rem;
+}
+
+.timeline__badge--success {
+  background: rgba(31, 155, 104, 0.12);
+  color: #197b53;
+}
+
+.timeline__badge--danger {
+  background: rgba(248, 101, 71, 0.14);
+  color: #bd492d;
 }
 
 .banner {

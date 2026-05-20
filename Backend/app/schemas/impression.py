@@ -22,3 +22,19 @@ class ImpressionBatchIn(ORMModel):
 
 class ImpressionBatchResult(ORMModel):
     inserted: int
+
+
+class ConversionEventIn(ORMModel):
+    experiment_id: str
+    variant_id: str
+    conversion_type: str = Field(min_length=1, max_length=120)
+    visitor_id: str | None = Field(default=None, max_length=255)
+    ts: datetime | None = None
+
+
+class ConversionBatchIn(ORMModel):
+    events: list[ConversionEventIn] = Field(min_length=1)
+
+
+class ConversionBatchResult(ORMModel):
+    inserted: int

@@ -13,6 +13,10 @@ type Variant = {
   hyros_tag?: string | null
   weight: number
   is_control: boolean
+  metadata?: {
+    multivariate?: boolean
+    multivariate_values?: Record<string, string>
+  }
 }
 
 type ExperimentConfig = {
@@ -41,6 +45,7 @@ interface Env {
   BACKEND_BASE_URL: string
   INGEST_API_KEY: string
   ASSIGNMENT_TTL_SECONDS?: string
+  ALLOW_DIRECT_INGEST_FALLBACK?: string
 }
 
 const DEFAULT_ASSIGNMENT_TTL = 60 * 60 * 24 * 30
@@ -91,7 +96,14 @@ export default {
         console.warn('KV assignment write failed; continuing redirect.', error)
       }
 
-      const destination = buildDestinationUrl(variant.destination_url, url, variant.hyros_tag)
+      const destination = buildDestinationUrl(
+        variant.destination_url,
+        url,
+        config.id,
+        variant.id,
+        variant.metadata?.multivariate_values,
+        variant.hyros_tag,
+      )
       const country = typeof request.cf?.country === 'string' ? request.cf.country : null
 
       const impressionEvent = {
@@ -106,8 +118,10 @@ export default {
       try {
         if (env.IMPRESSIONS_QUEUE) {
           await env.IMPRESSIONS_QUEUE.send(impressionEvent)
-        } else {
+        } else if (env.ALLOW_DIRECT_INGEST_FALLBACK === 'true') {
           await ingestDirect(env, impressionEvent)
+        } else {
+          console.warn('Impression delivery skipped because no queue binding or direct-ingest fallback is enabled.')
         }
       } catch (error) {
         // Remote preview mode does not currently support Queues reliably.
@@ -238,7 +252,14 @@ function selectVariant(variants: Variant[]) {
   return variants[0]
 }
 
-function buildDestinationUrl(destinationUrl: string, entryUrl: URL, hyrosTag?: string | null) {
+function buildDestinationUrl(
+  destinationUrl: string,
+  entryUrl: URL,
+  experimentId: string,
+  variantId: string,
+  multivariateValues?: Record<string, string>,
+  hyrosTag?: string | null,
+) {
   const destination = new URL(destinationUrl)
 
   TRACKING_PARAM_KEYS.forEach((key) => {
@@ -256,6 +277,14 @@ function buildDestinationUrl(destinationUrl: string, entryUrl: URL, hyrosTag?: s
 
   if (hyrosTag) {
     destination.searchParams.set('test_tag', hyrosTag)
+  }
+
+  destination.searchParams.set('exp_id', experimentId)
+  destination.searchParams.set('variant_id', variantId)
+  if (multivariateValues) {
+    Object.entries(multivariateValues).forEach(([key, value]) => {
+      destination.searchParams.set(`mv_${key}`, value)
+    })
   }
 
   return destination.toString()

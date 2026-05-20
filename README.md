@@ -7,9 +7,15 @@ Internal VWO replacement for URL-based traffic splitting.
 - FastAPI backend for experiment CRUD, pause/resume, impression ingest, and reporting
 - PostgreSQL schema + Alembic migration for `experiments`, `variants`, and `impressions`
 - Redis-backed caching layer for reporting endpoints
+- Prometheus-style metrics endpoint and request instrumentation
+- Optional webhook-based alert hooks for Cloudflare sync failures
 - React admin dashboard for experiment management and reporting
 - Cloudflare Worker for slug-based routing, weighted variant selection, sticky assignment, UTM passthrough, and Hyros `test_tag`
 - Cloudflare KV sync from backend to edge config
+- Conversion ingest endpoint plus significance-aware reporting
+- Monitoring summary and alert-evaluation endpoints
+- Multivariate preview endpoint that generates factor combinations for use with the existing worker/variant model
+- Experiment list/detail serialization verified after the variant metadata schema refactor
 
 ## Project Structure
 
@@ -54,6 +60,13 @@ ADMIN_API_KEY=dev-admin-key
 INGEST_API_KEY=dev-ingest-key
 ```
 
+Optional monitoring/alerts values:
+
+```env
+APP_ENV=development
+ALERT_WEBHOOK_URL=
+```
+
 ### Terminal 3: Expose Backend Publicly For Worker Testing
 
 The remote Cloudflare Worker cannot call `http://127.0.0.1:8000` directly, so expose the backend with ngrok:
@@ -74,6 +87,7 @@ Put that URL into [Worker/.dev.vars](</Users/apnitormacmini3/Desktop/Traffic Spl
 BACKEND_BASE_URL=https://your-subdomain.ngrok-free.app
 INGEST_API_KEY=dev-ingest-key
 ASSIGNMENT_TTL_SECONDS=2592000
+ALLOW_DIRECT_INGEST_FALLBACK=true
 ```
 
 If the ngrok URL changes, update `BACKEND_BASE_URL` and restart the worker.
@@ -120,6 +134,12 @@ Test a slug like:
 ```txt
 http://localhost:8787/new-entry-slug?utm_source=google&utm_medium=cpc
 ```
+
+The worker now appends these query params to destination URLs so conversion events can be attributed back to the experiment:
+
+- `exp_id`
+- `variant_id`
+- `test_tag`
 
 ## Cloudflare Worker Configuration
 
@@ -182,6 +202,30 @@ in [Worker/wrangler.toml](/Users/apnitormacmini3/Desktop/Traffic%20Splitting/Wor
 
 They must log into Wrangler using the Cloudflare account that owns those Worker/KV/Queue resources.
 
+## GitHub Actions CI/CD
+
+This repo now includes GitHub Actions workflows in [.github/workflows](./.github/workflows):
+
+- `ci.yml`
+  - backend: installs dependencies, runs `ruff`, applies Alembic migrations against Postgres, runs `pytest`, and compiles the app
+  - frontend: runs `npm ci`, `npm run lint`, and `npm run build`
+  - worker: runs `npm ci` and `npm run check`
+- `cd.yml`
+  - builds a backend package artifact
+  - builds a frontend static artifact
+  - can manually deploy the Cloudflare Worker with `workflow_dispatch`
+
+### Required GitHub Secrets For Worker Deploy
+
+Set these repository or environment secrets before using the manual worker deploy job:
+
+```txt
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+```
+
+The deploy job uses `Worker/wrangler.toml`, so production KV and queue bindings must already be correct there.
+
 ## Recommended Local Test Flow
 
 1. Start Redis
@@ -194,6 +238,74 @@ They must log into Wrangler using the Cloudflare account that owns those Worker/
 8. Activate the experiment
 9. Visit the worker slug URL
 10. Refresh reporting in the frontend
+
+If you want to test conversions/significance locally, POST conversion events to:
+
+```txt
+POST /ingest/conversions
+```
+
+Example payload:
+
+```json
+{
+  "events": [
+    {
+      "experiment_id": "00521e5f-6914-4cbb-9523-24d09039fa13",
+      "variant_id": "12f4288b-e263-4af8-9420-48c24d9d3f29",
+      "conversion_type": "signup",
+      "visitor_id": "optional-visitor-id"
+    }
+  ]
+}
+```
+
+Send it with:
+
+```txt
+Authorization: Bearer dev-ingest-key
+```
+
+Monitoring endpoints:
+
+- `GET /metrics`
+- `GET /monitoring/summary`
+- `POST /monitoring/alerts/dispatch`
+
+Multivariate preview endpoint:
+
+```txt
+POST /experiments/multivariate/preview
+```
+
+Example payload:
+
+```json
+{
+  "destination_url": "https://example.com/landing",
+  "hyros_tag_prefix": "mv",
+  "factors": [
+    {
+      "key": "headline",
+      "label": "Headline",
+      "options": [
+        { "key": "a", "label": "A" },
+        { "key": "b", "label": "B" }
+      ]
+    },
+    {
+      "key": "cta",
+      "label": "CTA",
+      "options": [
+        { "key": "x", "label": "X" },
+        { "key": "y", "label": "Y" }
+      ]
+    }
+  ]
+}
+```
+
+The response returns generated combination variants with equalized weights and `multivariate_values` metadata. The worker automatically forwards these assignments as query params such as `mv_headline=a`.
 
 ## Example Behavior
 
@@ -221,4 +333,19 @@ then it should redirect to the configured `entry_url`.
 - Redis is optional in development, but recommended for testing reporting cache behavior
 - `wrangler dev --remote` with queue bindings was unstable during development, so local testing uses direct HTTP ingest fallback in worker preview mode
 - Production should still use the intended queue-based ingest path
-- The `impressions` table is currently a single table; monthly partitioning is still pending
+- Raw `impressions` data is now monthly partitioned, and reporting reads from daily rollups
+- `/metrics` exposes Prometheus-compatible metrics for API traffic, ingest counts, and Cloudflare sync activity
+- Significance reporting currently uses a two-sided z-test against the control variant based on ingested conversion counts
+- Monitoring summaries evaluate configurable thresholds from env vars like `ALERT_LOOKBACK_MINUTES` and `ALERT_MIN_TRAFFIC_RATIO`
+- Multivariate support is currently a preview/generation workflow, not a dedicated GUI builder
+- `GET /experiments`, frontend experiment loading, reporting, and monitoring are currently working in local development
+
+## Remaining Work
+
+- Final production validation of the Cloudflare Queue consumer path
+- Production Worker deployment config against the real Cloudflare account/resources
+- Production hosting targets for backend and frontend
+- Live Cloudflare route/domain cutover for real entry traffic
+- Production secrets rotation process and deployment runbook
+- Broader monitoring dashboards/alert rules on top of `/metrics` and webhook alerts
+- A full multivariate GUI/editor and dedicated multivariate reporting screens

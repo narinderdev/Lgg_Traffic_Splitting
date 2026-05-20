@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import Field, HttpUrl, field_validator, model_validator
+from pydantic import Field, HttpUrl, model_validator
 
 from app.schemas.common import (
     ExperimentStatus,

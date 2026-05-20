@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
 from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, HttpUrl
 
 
 class ORMModel(BaseModel):
@@ -41,6 +42,11 @@ class VariantBase(ORMModel):
     hyros_tag: str | None = Field(default=None, max_length=255)
     weight: int = Field(ge=0, le=100)
     is_control: bool = False
+    routing_metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("routing_metadata", "metadata"),
+        serialization_alias="metadata",
+    )
 
 
 class VariantCreate(VariantBase):
@@ -68,6 +74,18 @@ class VariantImpressionCount(ORMModel):
     count: int
 
 
+class VariantConversionCount(ORMModel):
+    variant_id: UUID
+    variant_name: str
+    is_control: bool
+    conversions: int
+    conversion_rate: float
+    uplift_vs_control: float | None = None
+    z_score: float | None = None
+    p_value: float | None = None
+    is_significant: bool = False
+
+
 class DailyVariantCount(ORMModel):
     day: date
     variant_id: UUID
@@ -78,6 +96,49 @@ class DailyVariantCount(ORMModel):
 class StatsSummary(ORMModel):
     experiment_id: UUID
     totals: list[VariantImpressionCount]
+    conversions: list[VariantConversionCount] = Field(default_factory=list)
     by_device_type: list[DimensionCount]
     by_traffic_source: list[DimensionCount]
     generated_at: datetime
+
+
+class MonitoringAlert(ORMModel):
+    code: str
+    severity: str
+    message: str
+    current_value: float | int | None = None
+    threshold: float | int | None = None
+
+
+class MonitoringSummary(ORMModel):
+    generated_at: datetime
+    lookback_minutes: int
+    recent_impressions: int
+    previous_impressions: int
+    recent_conversions: int
+    active_experiments: int
+    paused_experiments: int
+    ingest_rejections: int
+    cloudflare_sync_failures: int
+    alerts: list[MonitoringAlert] = Field(default_factory=list)
+
+
+class MultivariateFactorOption(ORMModel):
+    key: str = Field(min_length=1, max_length=120, pattern=r"^[a-z0-9-_]+$")
+    label: str = Field(min_length=1, max_length=120)
+
+
+class MultivariateFactor(ORMModel):
+    key: str = Field(min_length=1, max_length=120, pattern=r"^[a-z0-9-_]+$")
+    label: str = Field(min_length=1, max_length=120)
+    options: list[MultivariateFactorOption] = Field(min_length=2)
+
+
+class MultivariatePreviewRequest(ORMModel):
+    destination_url: HttpUrl
+    factors: list[MultivariateFactor] = Field(min_length=2)
+    hyros_tag_prefix: str | None = Field(default=None, max_length=120)
+
+
+class MultivariatePreviewVariant(VariantBase):
+    factor_assignments: dict[str, str] = Field(default_factory=dict)

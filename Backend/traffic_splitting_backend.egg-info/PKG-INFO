@@ -9,6 +9,7 @@ Requires-Dist: asyncpg>=0.30.0
 Requires-Dist: fastapi>=0.121.1
 Requires-Dist: greenlet>=3.2.4
 Requires-Dist: httpx>=0.28.1
+Requires-Dist: prometheus-client>=0.23.1
 Requires-Dist: pydantic-settings>=2.11.0
 Requires-Dist: psycopg[binary]>=3.2.12
 Requires-Dist: python-multipart>=0.0.20

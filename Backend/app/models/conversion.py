@@ -10,8 +10,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 
-class Impression(Base):
-    __tablename__ = "impressions"
+class Conversion(Base):
+    __tablename__ = "conversions"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     experiment_id: Mapped[uuid.UUID] = mapped_column(
@@ -24,12 +24,11 @@ class Impression(Base):
         ForeignKey("variants.id", ondelete="CASCADE"),
         nullable=False,
     )
-    device_type: Mapped[str | None] = mapped_column(Text, nullable=True)
-    traffic_source: Mapped[str | None] = mapped_column(Text, nullable=True)
-    country: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conversion_type: Mapped[str] = mapped_column(Text, nullable=False)
+    visitor_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     ts: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), primary_key=True, nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    experiment = relationship("Experiment", back_populates="impressions", lazy="noload")
-    variant = relationship("Variant", back_populates="impressions", lazy="noload")
+    experiment = relationship("Experiment", back_populates="conversions", lazy="noload")
+    variant = relationship("Variant", back_populates="conversions", lazy="noload")

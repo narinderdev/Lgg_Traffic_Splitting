@@ -38,6 +38,17 @@ type StatsSummary = {
     is_control: boolean
     count: number
   }>
+  conversions: Array<{
+    variant_id: string
+    variant_name: string
+    is_control: boolean
+    conversions: number
+    conversion_rate: number
+    uplift_vs_control: number | null
+    z_score: number | null
+    p_value: number | null
+    is_significant: boolean
+  }>
   by_device_type: Array<{ dimension: string; count: number }>
   by_traffic_source: Array<{ dimension: string; count: number }>
   generated_at: string
@@ -48,6 +59,25 @@ type DailyCount = {
   variant_id: string
   variant_name: string
   count: number
+}
+
+type MonitoringSummary = {
+  generated_at: string
+  lookback_minutes: number
+  recent_impressions: number
+  previous_impressions: number
+  recent_conversions: number
+  active_experiments: number
+  paused_experiments: number
+  ingest_rejections: number
+  cloudflare_sync_failures: number
+  alerts: Array<{
+    code: string
+    severity: string
+    message: string
+    current_value: number | null
+    threshold: number | null
+  }>
 }
 
 const STORAGE_KEYS = {
@@ -106,11 +136,13 @@ function App() {
   const [isCreating, setIsCreating] = useState(true)
   const [stats, setStats] = useState<StatsSummary | null>(null)
   const [dailyCounts, setDailyCounts] = useState<DailyCount[]>([])
+  const [monitoring, setMonitoring] = useState<MonitoringSummary | null>(null)
   const [dateRange, setDateRange] = useState(defaultDateRange())
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
   const [isRefreshingStats, setIsRefreshingStats] = useState(false)
+  const [isRefreshingMonitoring, setIsRefreshingMonitoring] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -161,6 +193,18 @@ function App() {
     }
   }, [apiRequest, dateRange.end, dateRange.start])
 
+  const loadMonitoring = useCallback(async () => {
+    setIsRefreshingMonitoring(true)
+    try {
+      const nextMonitoring = await apiRequest<MonitoringSummary>('/monitoring/summary')
+      setMonitoring(nextMonitoring)
+    } catch (requestError) {
+      setError(getErrorMessage(requestError))
+    } finally {
+      setIsRefreshingMonitoring(false)
+    }
+  }, [apiRequest])
+
   const loadExperiments = useCallback(async () => {
     setIsLoading(true)
     setError(null)
@@ -174,6 +218,7 @@ function App() {
         setDraft(blankExperiment())
         setStats(null)
         setDailyCounts([])
+        void loadMonitoring()
         return
       }
 
@@ -189,12 +234,13 @@ function App() {
         })
         await loadStats(preferred.id)
       }
+      await loadMonitoring()
     } catch (requestError) {
       setError(getErrorMessage(requestError))
     } finally {
       setIsLoading(false)
     }
-  }, [apiRequest, loadStats, selectedId])
+  }, [apiRequest, loadMonitoring, loadStats, selectedId])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -345,6 +391,8 @@ function App() {
 
   const totalWeight = draft.variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0)
   const totalImpressions = stats?.totals.reduce((sum, item) => sum + item.count, 0) ?? 0
+  const totalConversions = stats?.conversions.reduce((sum, item) => sum + item.conversions, 0) ?? 0
+  const winningVariant = stats?.conversions.find((item) => !item.is_control && item.is_significant && (item.uplift_vs_control || 0) > 0) ?? null
   const groupedDailyCounts = groupDailyCounts(dailyCounts)
 
   return (
@@ -650,6 +698,15 @@ function App() {
                   <small>{stats ? `Generated ${new Date(stats.generated_at).toLocaleString()}` : 'No data yet'}</small>
                 </div>
                 <div className="stat-card">
+                  <span>Total conversions</span>
+                  <strong>{totalConversions.toLocaleString()}</strong>
+                  <small>
+                    {winningVariant
+                      ? `${winningVariant.variant_name} is significant`
+                      : 'No significant winner yet'}
+                  </small>
+                </div>
+                <div className="stat-card">
                   <span>Device mix</span>
                   <strong>{stats?.by_device_type.length || 0} segments</strong>
                   <small>{stats?.by_device_type.map((item) => `${item.dimension}: ${item.count}`).join(' · ') || 'No data yet'}</small>
@@ -683,6 +740,39 @@ function App() {
                 </div>
 
                 <div className="report-panel">
+                  <h4>Conversion performance</h4>
+                  <div className="timeline">
+                    {stats?.conversions.length ? (
+                      stats.conversions.map((item) => (
+                        <div key={item.variant_id} className="timeline__row">
+                          <strong>{item.variant_name}</strong>
+                          <div>
+                            <span className="timeline__badge">
+                              {item.conversions} conv
+                            </span>
+                            <span className="timeline__badge">
+                              {(item.conversion_rate * 100).toFixed(2)}% CVR
+                            </span>
+                            {item.uplift_vs_control !== null ? (
+                              <span className="timeline__badge">
+                                {(item.uplift_vs_control * 100).toFixed(2)}% uplift
+                              </span>
+                            ) : null}
+                            {item.p_value !== null ? (
+                              <span className={`timeline__badge ${item.is_significant ? 'timeline__badge--success' : ''}`}>
+                                p={item.p_value.toFixed(4)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <span className="muted">No conversion data yet.</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="report-panel">
                   <h4>Daily traffic</h4>
                   <div className="timeline">
                     {groupedDailyCounts.length === 0 ? (
@@ -706,6 +796,78 @@ function App() {
               </div>
             </>
           )}
+        </section>
+
+        <section className="panel panel--full">
+          <div className="section-heading">
+            <div>
+              <h3>Monitoring</h3>
+              <p>Recent traffic health, ingest rejection counts, and Cloudflare sync failures.</p>
+            </div>
+            <button className="button button--ghost" type="button" onClick={() => void loadMonitoring()} disabled={isRefreshingMonitoring}>
+              {isRefreshingMonitoring ? 'Refreshing...' : 'Refresh monitoring'}
+            </button>
+          </div>
+
+          <div className="stats-grid">
+            <div className="stat-card">
+              <span>Recent impressions</span>
+              <strong>{monitoring?.recent_impressions ?? 0}</strong>
+              <small>{monitoring ? `Last ${monitoring.lookback_minutes} minutes` : 'No data yet'}</small>
+            </div>
+            <div className="stat-card">
+              <span>Recent conversions</span>
+              <strong>{monitoring?.recent_conversions ?? 0}</strong>
+              <small>{monitoring ? `Previous window: ${monitoring.previous_impressions} impressions` : 'No data yet'}</small>
+            </div>
+            <div className="stat-card">
+              <span>Operational alerts</span>
+              <strong>{monitoring?.alerts.length ?? 0}</strong>
+              <small>{monitoring?.alerts.map((alert) => alert.code).join(' · ') || 'No active alerts'}</small>
+            </div>
+          </div>
+
+          <div className="reporting-grid">
+            <div className="report-panel">
+              <h4>System counters</h4>
+              <div className="timeline">
+                <div className="timeline__row">
+                  <strong>Experiments</strong>
+                  <div>
+                    <span className="timeline__badge">active: {monitoring?.active_experiments ?? 0}</span>
+                    <span className="timeline__badge">paused: {monitoring?.paused_experiments ?? 0}</span>
+                  </div>
+                </div>
+                <div className="timeline__row">
+                  <strong>Failures</strong>
+                  <div>
+                    <span className="timeline__badge">ingest rejections: {monitoring?.ingest_rejections ?? 0}</span>
+                    <span className="timeline__badge">Cloudflare sync: {monitoring?.cloudflare_sync_failures ?? 0}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="report-panel">
+              <h4>Triggered alerts</h4>
+              <div className="timeline">
+                {monitoring?.alerts.length ? (
+                  monitoring.alerts.map((alert) => (
+                    <div key={alert.code} className="timeline__row">
+                      <strong>{alert.code}</strong>
+                      <div>
+                        <span className={`timeline__badge ${alert.severity === 'critical' ? 'timeline__badge--danger' : ''}`}>
+                          {alert.severity}
+                        </span>
+                        <span className="timeline__badge">{alert.message}</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <span className="muted">No active alerts.</span>
+                )}
+              </div>
+            </div>
+          </div>
         </section>
       </main>
     </div>

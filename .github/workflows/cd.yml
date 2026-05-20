@@ -1,0 +1,83 @@
+name: CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_worker:
+        description: "Deploy the Cloudflare Worker"
+        required: true
+        default: false
+        type: boolean
+      release_tag:
+        description: "Optional release label for uploaded artifacts"
+        required: false
+        default: manual
+        type: string
+
+jobs:
+  build_backend_artifact:
+    name: Build backend artifact
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install backend build tooling
+        run: pip install build
+      - name: Build backend package
+        run: python -m build
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-${{ inputs.release_tag }}
+          path: Backend/dist
+
+  build_frontend_artifact:
+    name: Build frontend artifact
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-${{ inputs.release_tag }}
+          path: Frontend/dist
+
+  deploy_worker:
+    name: Deploy worker
+    if: ${{ inputs.deploy_worker }}
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: Worker
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Worker/package-lock.json
+      - name: Install worker dependencies
+        run: npm ci
+      - name: Deploy Cloudflare Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy

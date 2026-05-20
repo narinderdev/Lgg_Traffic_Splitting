@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import db_session
 from app.core.security import require_admin_api_key
 from app.schemas.common import DailyVariantCount, StatsSummary
+from app.schemas.common import MultivariatePreviewRequest, MultivariatePreviewVariant
 from app.schemas.experiment import (
     ExperimentCreate,
     ExperimentListItem,
@@ -19,6 +20,7 @@ from app.schemas.experiment import (
 from app.services.cloudflare import delete_experiment_config, upsert_experiment_config
 from app.services.experiments import (
     create_experiment,
+    build_multivariate_preview,
     delete_experiment,
     get_daily_stats,
     get_experiment_or_404,
@@ -122,3 +124,10 @@ async def experiment_daily_stats_endpoint(
 ) -> list[DailyVariantCount]:
     experiment = await get_experiment_or_404(session, experiment_id)
     return await get_daily_stats(session, experiment, start_date, end_date)
+
+
+@router.post("/multivariate/preview", response_model=list[MultivariatePreviewVariant])
+async def multivariate_preview_endpoint(
+    payload: MultivariatePreviewRequest,
+) -> list[MultivariatePreviewVariant]:
+    return build_multivariate_preview(payload)

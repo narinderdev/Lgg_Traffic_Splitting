@@ -38,3 +38,4 @@ class Experiment(Base):
         lazy="selectin",
     )
     impressions = relationship("Impression", back_populates="experiment", lazy="noload")
+    conversions = relationship("Conversion", back_populates="experiment", lazy="noload")

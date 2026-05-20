@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: traffic_splitting
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d traffic_splitting"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: Backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/traffic_splitting
+      REDIS_URL: redis://127.0.0.1:6379/0
+      ADMIN_API_KEY: ci-admin-key
+      INGEST_API_KEY: ci-ingest-key
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install backend dependencies
+        run: pip install -e ".[dev]"
+      - name: Lint backend
+        run: ruff check app tests
+      - name: Run migrations
+        run: alembic upgrade head
+      - name: Run backend tests
+        run: pytest
+      - name: Compile backend
+        run: python -m compileall app
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Lint frontend
+        run: npm run lint
+      - name: Build frontend
+        run: npm run build
+
+  worker:
+    name: Worker
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Worker
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Worker/package-lock.json
+      - name: Install worker dependencies
+        run: npm ci
+      - name: Type-check worker
+        run: npm run check

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -24,9 +24,11 @@ class Variant(Base):
     hyros_tag: Mapped[str | None] = mapped_column(Text, nullable=True)
     weight: Mapped[int] = mapped_column(Integer, nullable=False)
     is_control: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    routing_metadata: Mapped[dict] = mapped_column("routing_metadata", JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
     experiment = relationship("Experiment", back_populates="variants", lazy="noload")
     impressions = relationship("Impression", back_populates="variant", lazy="noload")
+    conversions = relationship("Conversion", back_populates="variant", lazy="noload")

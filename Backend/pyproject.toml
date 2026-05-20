@@ -10,6 +10,7 @@ dependencies = [
   "fastapi>=0.121.1",
   "greenlet>=3.2.4",
   "httpx>=0.28.1",
+  "prometheus-client>=0.23.1",
   "pydantic-settings>=2.11.0",
   "psycopg[binary]>=3.2.12",
   "python-multipart>=0.0.20",
