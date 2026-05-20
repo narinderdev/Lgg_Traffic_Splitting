@@ -1,6 +1,11 @@
 name = "traffic-splitting-worker-dev"
 main = "src/index.ts"
 compatibility_date = "2026-05-03"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+SENTRY_ENVIRONMENT = "development"
+SENTRY_TRACES_SAMPLE_RATE = "0.2"
 
 [[kv_namespaces]]
 binding = "EXPERIMENTS_KV"

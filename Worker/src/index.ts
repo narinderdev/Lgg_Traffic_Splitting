@@ -1,3 +1,5 @@
+import * as Sentry from '@sentry/cloudflare'
+
 type DeviceType = 'mobile' | 'desktop' | 'tablet'
 type TrafficSource = 'paid_search' | 'social' | 'direct' | 'organic' | 'unknown'
 
@@ -46,12 +48,15 @@ interface Env {
   INGEST_API_KEY: string
   ASSIGNMENT_TTL_SECONDS?: string
   ALLOW_DIRECT_INGEST_FALLBACK?: string
+  SENTRY_DSN?: string
+  SENTRY_ENVIRONMENT?: string
+  SENTRY_TRACES_SAMPLE_RATE?: string
 }
 
 const DEFAULT_ASSIGNMENT_TTL = 60 * 60 * 24 * 30
 const TRACKING_PARAM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'msclkid']
 
-export default {
+const handler: ExportedHandler<Env, ImpressionEvent> = {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
       const url = new URL(request.url)
@@ -136,6 +141,11 @@ export default {
         },
       })
     } catch (error) {
+      Sentry.withScope((scope) => {
+        scope.setTag('worker.phase', 'fetch')
+        scope.setExtra('request_url', request.url)
+        Sentry.captureException(error)
+      })
       const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
       return new Response(`Worker execution failed: ${detail}`, { status: 500 })
     }
@@ -159,6 +169,21 @@ export default {
     batch.ackAll()
   },
 }
+
+export default Sentry.withSentry<Env, ImpressionEvent>(
+  (env: Env) => {
+    if (!env.SENTRY_DSN) {
+      return undefined
+    }
+
+    return {
+      dsn: env.SENTRY_DSN,
+      environment: env.SENTRY_ENVIRONMENT || 'production',
+      tracesSampleRate: Number(env.SENTRY_TRACES_SAMPLE_RATE || '0'),
+    }
+  },
+  handler,
+)
 
 async function ingestDirect(env: Env, event: ImpressionEvent) {
   const response = await fetch(`${env.BACKEND_BASE_URL}/ingest/impressions`, {

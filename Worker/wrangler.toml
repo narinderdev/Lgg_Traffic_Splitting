@@ -1,11 +1,14 @@
 name = "traffic-splitting-worker"
 main = "src/index.ts"
 compatibility_date = "2026-05-03"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 BACKEND_BASE_URL = "https://lgg-traffic-splitting-api.onrender.com"
 INGEST_API_KEY = "6c9f91e9500e40ae4832fbf081940e05e299d237cd7efb07"
 ASSIGNMENT_TTL_SECONDS = "2592000"
+SENTRY_ENVIRONMENT = "production"
+SENTRY_TRACES_SAMPLE_RATE = "0.2"
 
 [[kv_namespaces]]
 binding = "EXPERIMENTS_KV"
