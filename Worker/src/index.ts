@@ -60,6 +60,16 @@ const handler: ExportedHandler<Env, ImpressionEvent> = {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
       const url = new URL(request.url)
+
+      if (url.pathname === '/debug-sentry') {
+        const expected = `Bearer ${env.INGEST_API_KEY}`
+        const authorization = request.headers.get('authorization')
+        if (authorization !== expected) {
+          return new Response('Invalid ingest API key', { status: 401 })
+        }
+        throw new Error('Temporary Worker Sentry verification error')
+      }
+
       const slug = extractSlug(url.pathname)
 
       if (!slug) {
