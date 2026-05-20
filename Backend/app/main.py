@@ -4,7 +4,7 @@ import logging
 from time import perf_counter
 
 import sentry_sdk
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from starlette.requests import Request
@@ -70,3 +70,14 @@ async def observe_requests(request: Request, call_next):
 @app.get("/", tags=["meta"])
 async def root() -> dict[str, str]:
     return {"name": "traffic-splitting-api", "status": "ok"}
+
+
+@app.get("/debug-sentry", tags=["debug"])
+async def debug_sentry(authorization: str | None = Header(default=None)) -> None:
+    expected = f"Bearer {settings.admin_api_key}"
+    if authorization != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin API key",
+        )
+    raise RuntimeError("Temporary Sentry verification error")
