@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     cloudflare_kv_namespace_id: str | None = Field(default=None, alias="CLOUDFLARE_KV_NAMESPACE_ID")
     cloudflare_api_token: str | None = Field(default=None, alias="CLOUDFLARE_API_TOKEN")
     alert_webhook_url: str | None = Field(default=None, alias="ALERT_WEBHOOK_URL")
+    alert_webhook_kind: str = Field(default="auto", alias="ALERT_WEBHOOK_KIND")
     stats_cache_ttl_seconds: int = Field(default=300, alias="STATS_CACHE_TTL_SECONDS")
     sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
     sentry_environment: str = Field(default="development", alias="SENTRY_ENVIRONMENT")
